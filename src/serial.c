@@ -27,7 +27,6 @@ void write_serport(const char *str )
 		length = j;
 	for (int i = 0; i <= length; ++i)
 		put_char(str[i]);
-	
 }
 
 

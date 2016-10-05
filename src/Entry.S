@@ -1,13 +1,3 @@
-#define ENOMEM  1
-#define ENOENT  2
-#define ENOTSUP 3
-#define EBUSY   4
-#define EEXIST  5
-#define EINVAL  6
-#define EIO     7
-#define ENOEXEC 8
-#define ENOSYS  9
-
 	.text
 	.code64
 
@@ -48,27 +38,58 @@
 	movq 88(%rsp), %rcx;	\
 	movq 96(%rsp), %rdx;	\
 	movq 104(%rsp), %rsi;	\
-	movq 112(%rsp), %rdi;	
+	movq 112(%rsp), %rdi;
 
+// https://en.wikipedia.org/wiki/X86_calling_conventions#cite_note-ms-12
+// we must store r9, r8, rax, rcx, rdx registers  for c calls. (gcc compiler corrensponds microsoft x64 calling convention)
+#define SAVE_REGISTERS \
+	movq %r9, 0(%rsp);	\
+	movq %r8, 8(%rsp);	\
+	movq %rax, 16(%rsp);	\
+	movq %rcx, 24(%rsp);	\
+	movq %rdx, 32(%rsp);
+
+#define RESTORE_REGISTERS \
+	movq 0(%rsp), %r9;	\
+	movq 8(%rsp), %r8;	\
+	movq 16(%rsp), %rax;	\
+	movq 24(%rsp), %rcx;	\
+	movq 32(%rsp), %rdx;
 
 	.extern isr_common_handler
 common_handler:
-	subq $120, %rsp
-	SAVE_VOLATILE
-	SAVE_NONVOLATILE
-        cld 
+	####subq $120, %rsp
+	###subq $56, %rsp
+	#subq $8, %rsp
+	####SAVE_VOLATILE
+	####SAVE_NONVOLATILE
+
+	subq $40, %rsp
+	SAVE_REGISTERS
+
+        cld #clear direction flag
+	    #https://en.wikipedia.org/wiki/Direction_flag
+	    #direction flag regulates what sequence of working
+	    #with data in memory. this part of processor state
+	    #antagonist command is std :) set direction flag
 
 	movq %rsp, %rdi
 	call isr_common_handler
 
-	RESTORE_VOLATILE 
-	RESTORE_NONVOLATILE
-	addq $136, %rsp 
-			
-	iretq 
+	RESTORE_REGISTERS
+	addq $56, %rsp
+
+	###RESTORE_VOLATILE 
+	###RESTORE_NONVOLATILE
+	###addq $136, %rsp
+	#addq $24, %rsp
+	###addq $62, %rsp
+
+	iretq
 
 #define ENTRY_NAME(nr) entry ## nr
 
+#interrupt handler
 #define ISR(nr) \
 	.align 16;	\
 ENTRY_NAME(nr):		\
@@ -76,12 +97,16 @@ ENTRY_NAME(nr):		\
 	pushq $nr;	\
 	jmp common_handler
 
+#exception handler
 #define EXC(nr) \
 	.align 16;	\
 ENTRY_NAME(nr):		\
 	pushq $nr;	\
 	jmp common_handler
 
+#8,10-14,17 exceptions with error code!
+#in ISR routine we push $0 to correspond stack state with
+#case of exception when errno pushed to stack
 	ISR(0)
 	ISR(1)
 	ISR(2)
@@ -123,17 +148,12 @@ ENTRY_NAME(nr):		\
 	ISR(38)
 	ISR(39)
 	ISR(40)
-	ISR(41)
-	ISR(42)
-	ISR(43)
-	ISR(44)
-	ISR(45)
-	ISR(46)
-	ISR(47)
+#etc...
 
+#array with handler wrappers
 	.align 16
-	.global row_idt_entries
-row_idt_entries:
+	.global int_handler_wrappers
+int_handler_wrappers:
 	.quad ENTRY_NAME(0)
 	.quad ENTRY_NAME(1)
 	.quad ENTRY_NAME(2)
@@ -175,10 +195,4 @@ row_idt_entries:
 	.quad ENTRY_NAME(38)
 	.quad ENTRY_NAME(39)
 	.quad ENTRY_NAME(40)
-	.quad ENTRY_NAME(41)
-	.quad ENTRY_NAME(42)
-	.quad ENTRY_NAME(43)
-	.quad ENTRY_NAME(44)
-	.quad ENTRY_NAME(45)
-	.quad ENTRY_NAME(46)
-	.quad ENTRY_NAME(47)
+#etc

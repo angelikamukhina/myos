@@ -8,13 +8,28 @@ static void qemu_gdb_hang(void)
 }
 
 #include <serial.h>
-#include <desc.h>
 #include <ints.h>
 #include <interrupts.h>
-void inthandler(void){
+#include <controller.h>
 
-    write_serport("I am interrupt");
+void inthandler( int irqno )
+{
+	(void) irqno;
+	write_serport("I am interrupt handler!");
 }
+
+void timerhandler( int irqno )
+{
+	(void) irqno;
+	(void) contr_of_interrupts;
+  	con_mask( contr_of_interrupts, irqno - 32 );
+
+	write_serport("TIMER TICK!");
+
+	con_eoi( contr_of_interrupts, irqno - 32 );
+	con_unmask( contr_of_interrupts, irqno - 32 );
+}
+
 void main(void)
 {
 	qemu_gdb_hang();
@@ -23,17 +38,12 @@ void main(void)
 
 	write_serport("Hello, World!");
 
-
-	set_ints(); 
-
-        enable_ints();
-
-
+	set_ints();
+	enable_ints();
 
 	bind_idt_handler(34, &inthandler);
  
-	bind_idt_handler(32, &inthandler);
-
+	bind_idt_handler(32, &timerhandler);
 
 	while (1);
 }
