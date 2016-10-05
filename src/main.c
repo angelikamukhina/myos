@@ -24,9 +24,11 @@ void main(void)
 	write_serport("Hello, World!");
 
 
+	set_ints(); 
+
         enable_ints();
 
-	set_ints();
+
 
 	bind_idt_handler(34, &inthandler);
  
