@@ -40,8 +40,7 @@
 	movq 104(%rsp), %rsi;	\
 	movq 112(%rsp), %rdi;
 
-// https://en.wikipedia.org/wiki/X86_calling_conventions#cite_note-ms-12
-// we must store r9, r8, rax, rcx, rdx registers  for c calls. (gcc compiler corrensponds microsoft x64 calling convention)
+
 #define SAVE_REGISTERS \
 	movq %r9, 0(%rsp);	\
 	movq %r8, 8(%rsp);	\
@@ -67,11 +66,7 @@ common_handler:
 	subq $40, %rsp
 	SAVE_REGISTERS
 
-        cld #clear direction flag
-	    #https://en.wikipedia.org/wiki/Direction_flag
-	    #direction flag regulates what sequence of working
-	    #with data in memory. this part of processor state
-	    #antagonist command is std :) set direction flag
+        cld 
 
 	movq %rsp, %rdi
 	call isr_common_handler

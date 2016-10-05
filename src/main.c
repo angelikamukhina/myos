@@ -44,6 +44,7 @@ void main(void)
 	bind_idt_handler(34, &inthandler);
  
 	bind_idt_handler(32, &timerhandler);
+	con_unmask(contr_of_interrupts, 0);
 
 	while (1);
 }

@@ -101,7 +101,7 @@ void bind_idt_handler(int num, irq_t phand)
 
 	setup_irq(isr, num);
 
-	con_unmask(contr_of_interrupts, num-32);
+
 }
 
 void set_ints(void)
