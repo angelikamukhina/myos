@@ -18,13 +18,13 @@ struct thread_regs {
 */
 	uint64_t r9;
 	uint64_t r8;
-	uint64_t rax;
+//	uint64_t rax;
 	uint64_t rcx;
 	uint64_t rdx;
-/*
+
 	uint64_t rsi;
 	uint64_t rdi;
-*/
+
 //state info
 	uint64_t intno;
 	uint64_t error;

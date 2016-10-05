@@ -27,9 +27,9 @@ static struct idt_ptr idt_ptr;
 //page 3 fig. 1
 //size 16 bytes
 //http://wiki.osdev.org/Interrupt_Descriptor_Table
-//@see IDT in IA-32e Mode (64-bit IDT)
+//see IDT in IA-32e Mode (64-bit IDT)
 //about attr
-//@see http://wiki.osdev.org/Descriptors#type_attr
+//see http://wiki.osdev.org/Descriptors#type_attr
 struct idt_descriptor {
 	uint16_t haddr_low;
 	uint16_t segment_selector;
@@ -81,7 +81,6 @@ void setup_irq(int_handler_wrapper hwrapper, int num)
 	//get descriptor from idt
 	struct idt_descriptor *desc = idt + num;
 
-	//64 bits; we may use unsigned long
 	unsigned long handler_addr = (unsigned long) hwrapper;
 
 	desc->haddr_low = handler_addr & 0xFFFF;

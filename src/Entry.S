@@ -44,16 +44,18 @@
 #define SAVE_REGISTERS \
 	movq %r9, 0(%rsp);	\
 	movq %r8, 8(%rsp);	\
-	movq %rax, 16(%rsp);	\
-	movq %rcx, 24(%rsp);	\
-	movq %rdx, 32(%rsp);
+	movq %rcx, 16(%rsp);	\
+	movq %rdx, 24(%rsp);    \
+	movq %rsi, 32(%rsp);    \
+	movq %rdi, 40(%rsp);    
 
 #define RESTORE_REGISTERS \
 	movq 0(%rsp), %r9;	\
 	movq 8(%rsp), %r8;	\
-	movq 16(%rsp), %rax;	\
-	movq 24(%rsp), %rcx;	\
-	movq 32(%rsp), %rdx;
+	movq 16(%rsp), %rcx;    \
+	movq 24(%rsp), %rdx;    \
+	movq 32(%rsp), %rsi;    \
+	movq 40(%rsp), %rdi;
 
 	.extern isr_common_handler
 common_handler:
@@ -63,7 +65,7 @@ common_handler:
 	####SAVE_VOLATILE
 	####SAVE_NONVOLATILE
 
-	subq $40, %rsp
+	subq $48, %rsp
 	SAVE_REGISTERS
 
         cld 
@@ -72,7 +74,7 @@ common_handler:
 	call isr_common_handler
 
 	RESTORE_REGISTERS
-	addq $56, %rsp
+	addq $64, %rsp
 
 	###RESTORE_VOLATILE 
 	###RESTORE_NONVOLATILE
