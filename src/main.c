@@ -22,12 +22,12 @@ void timerhandler( int irqno )
 {
 	(void) irqno;
 	(void) contr_of_interrupts;
-  	con_mask( contr_of_interrupts, irqno - 32 );
+ // 	con_mask( contr_of_interrupts, irqno - 32 );
 
 	write_serport("TIMER TICK!");
 
 	con_eoi( contr_of_interrupts, irqno - 32 );
-	con_unmask( contr_of_interrupts, irqno - 32 );
+//	con_unmask( contr_of_interrupts, irqno - 32 );
 }
 
 void main(void)
