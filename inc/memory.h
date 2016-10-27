@@ -6,4 +6,7 @@
 #define KERNEL_CS	0x08
 #define KERNEL_DS	0x10
 
+#define PHYS_TO_VIRT(addr) ((intptr_t)addr + VIRTUAL_BASE)
+#define VIRT_TO_PHYS(addr) ((intptr_t)addr - VIRTUAL_BASE)
+
 #endif /*__MEMORY_H__*/

@@ -16,7 +16,8 @@ start32:
 
 
 	.align 16
-multiboot_header:
+        .global multiboot_header
+multiboot_header:                 
 	.long MB_HEADER_MAGIC
 	.long MB_HEADER_FLAGS
 	.long MB_HEADER_CKSUM
@@ -49,6 +50,14 @@ idt_ptr:
 	.word 0
 	.quad 0
 
+	.global mboot_magic
+mboot_magic:
+	.long 0
+
+	.global mboot_info
+mboot_info:
+	.long 0
+
 	.align 16
 	.space 0x100
 stack_top:
@@ -58,6 +67,8 @@ stack_top:
 	pushl %eax
 	call videomem_clrscr
 	popl %eax
+	movl %eax, mboot_magic
+	movl %ebx, mboot_info
 	cmpl $0x2badb002, %eax
 	je 1f
 
@@ -100,49 +111,51 @@ stack_top:
 	ljmpl $0x08, $start64
 
 
-#define PTE_PRESENT	(1 << 0)
-#define PTE_WRITE	(1 << 1)
-#define PTE_LARGE	(1 << 7)
-#define CR4_PAE		(1 << 5)
+#define PTE_PRESENT	(1 << 0) // this bit is set when this page is in memory
+#define PTE_WRITE	(1 << 1) // page is writable
+#define PTE_LARGE	(1 << 7) //больше 2 мб
+#define PTE_USED        (1 << 5) //this page is used 
+#define CR4_PAE		(1 << 5) 
 
 setup_mapping:
 	pushl $setup_paging
 	call videomem_puts
 	addl $4, %esp
 
-	movl $(bootstrap_pml3 - VIRTUAL_BASE), %edi
-	movl $(PTE_PRESENT | PTE_WRITE | PTE_LARGE), %eax
-	movl $0, %ebx
-	movl %eax, (%edi)
-	movl %ebx, 4(%edi)
-	movl %eax, 4080(%edi)
-	movl %ebx, 4084(%edi)
-	add $0x40000000, %eax
-	adc $0, %ebx
-	movl %eax, 8(%edi)
+	movl $(bootstrap_pml3 - VIRTUAL_BASE), %edi // присваиваем адрес памяти размера 4096Б значению регистра edi
+	movl $(PTE_PRESENT | PTE_LARGE | PTE_USED), %eax // создаем дополнительную переменную для хранения флагов
+	movl $0, %ebx // заполняем этот регистр нулями
+	movl %eax, (%edi) // разыменовываем поинтер, который хранится в регистре и помещаем в начало содержимое регистра eax, то есть флаги ( создаем первую запись в таблице страниц третьего уровня) 
+	movl %ebx, 4(%edi) // заполняем нулями остальные 4 байта
+	movl %eax, 4080(%edi) // на предпоследние 16 байт помещаем опять те же флаги 
+	movl %ebx, 4084(%edi)  // остальные 4 байта заполняем нулями 
+	add $0x40000000, %eax   // устанавляваем последний бит 
+	adc $0, %ebx //заполняем нулями 
+	movl %eax, 8(%edi) //вторая страница 
 	movl %ebx, 12(%edi)
-	movl %eax, 4088(%edi)
+	movl %eax, 4088(%edi) 
 	movl %ebx, 4092(%edi)
 	add $0x40000000, %eax
 	adc $0, %ebx
-	movl %eax, 16(%edi)
+	movl %eax, 16(%edi) //третья страница
 	movl %ebx, 20(%edi)
 	add $0x40000000, %eax
 	adc $0, %ebx
-	movl %eax, 24(%edi)
+	movl %eax, 24(%edi)//четвертая страница
 	movl %ebx, 28(%edi)
 
-	movl $(bootstrap_pml4 - VIRTUAL_BASE), %edi
-	movl $(bootstrap_pml3 - VIRTUAL_BASE + PTE_PRESENT + PTE_WRITE), %eax
+	movl $(bootstrap_pml4 - VIRTUAL_BASE), %edi //берем адрес таблицы четвертого уровня
+	movl $(bootstrap_pml3 - VIRTUAL_BASE + PTE_PRESENT + PTE_WRITE), %eax //в начало записываем флаги и физический адрес таблицы третьего уровня 
 	movl %eax, (%edi)
+	movl %eax, 2048(%edi)
 	movl %eax, 4088(%edi)
 
 	movl %cr4, %eax
 	orl $CR4_PAE, %eax
-	movl %eax, %cr4
+	movl %eax, %cr4  //включаем paging
 
-	movl $(bootstrap_pml4 - VIRTUAL_BASE), %eax
-	movl %eax, %cr3
+	movl $(bootstrap_pml4 - VIRTUAL_BASE), %eax // записываем адрес таблицы четвертого уровня в регистр 
+	movl %eax, %cr3 //writing addr of our page table to special register
 	ret
 
 
