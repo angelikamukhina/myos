@@ -6,11 +6,11 @@
         BASE is equal to 'd', interpret that D is decimal, and if BASE is
         equal to 'x', interpret that D is hexadecimal. */
      void
-     itoa (char *buf, int base, int d)
+     itoa (char *buf, int base, long long d)
      {
        char *p = buf;
        char *p1, *p2;
-       unsigned long ud = d;
+       unsigned long long ud = d;
        int divisor = 10;
      
        /* If %d is specified and D is minus, put `-' in the head. */
@@ -80,7 +80,7 @@
                  case 'u':
                  case 'x':
                    //itoa1 (buf, c, *((int *) arg++));
-		   itoa (buf, c, va_arg(args, int));
+		   itoa (buf, c, va_arg(args, long long));
 		   
                    p = buf;
                    goto string;

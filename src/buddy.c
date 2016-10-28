@@ -4,7 +4,7 @@
 #include "buddy.h"
 #include <inttypes.h>
 
-struct buddy_allocator * create_buddy( unsigned long long start, unsigned long long length )
+struct buddy_allocator * create_buddy( uint64_t start, uint64_t length )
 {
 	//find allocator in allocator pool...
 	buddy_allocator_t * allocator;
@@ -17,13 +17,13 @@ struct buddy_allocator * create_buddy( unsigned long long start, unsigned long l
 
   	allocator->mempool_start_addr = (void *) ALIGN_UP( PHYS_TO_VIRT(start) );
 	/*
-	printf( "check align: %d \n", ( (unsigned long long)g_memory - ( (unsigned long long)g_memory / PAGE_SIZE ) * PAGE_SIZE ) );
-	if ( (unsigned long long)g_memory >= (unsigned long long)PHYS_TO_VIRT(start) )
+	printf( "check align: %d \n", ( (uint64_t)g_memory - ( (uint64_t)g_memory / PAGE_SIZE ) * PAGE_SIZE ) );
+	if ( (uint64_t)g_memory >= (uint64_t)PHYS_TO_VIRT(start) )
 	  printf(" g_memory >= PHYS_TO_VIRT(start) \n");
 	*/
 	//calc log_2 :)
 	allocator->MAX_ORDER = 0;
-	unsigned long long tmp = length;
+	uint64_t tmp = length;
         while( tmp )
         {
             tmp >>= 1;
@@ -58,10 +58,10 @@ struct buddy_allocator * create_buddy( unsigned long long start, unsigned long l
 	return allocator;
 }
 
-void *buddy_alloc(buddy_allocator_t * allocator, unsigned long size)
+void *buddy_alloc(buddy_allocator_t * allocator, uint64_t size)
 {
         //find correct size
-        unsigned long sizeNeeded = 2;
+        uint64_t sizeNeeded = 2;
         int orderNeeded = 1;
         while( size > sizeNeeded )
         {

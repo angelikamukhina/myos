@@ -22,13 +22,11 @@ void multiboot_getinfo(unsigned long addr)
                 (unsigned long) mmmap < mbi->mmap_addr + mbi->mmap_length;
                 mmmap = (multiboot_memory_map_t *) ((unsigned long) mmmap
                                          + mmmap->size + sizeof (mmmap->size)))
-             printf (" size = 0x%x, base_addr = 0x%x%x,"
-                     " length = 0x%x%x, type = 0x%x\n",
+             printf (" size = 0x%x, base_addr = 0x%x,"
+                     " length = 0x%x, type = 0x%x\n",
                      (unsigned) mmmap->size,
-                     mmmap->addr >> 32,
-                     mmmap->addr & 0xffffffff,
-                     mmmap->len >> 32,
-                     mmmap->len & 0xffffffff,
+                     mmmap->addr,
+                     mmmap->len,
                      (unsigned) mmmap->type);
          } 
 }

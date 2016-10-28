@@ -40,9 +40,7 @@ typedef struct {
         intptr_t addr;
 } page_t;
 
-struct buddy_allocator;
-typedef struct buddy_allocator buddy_allocator_t;
-struct buddy_allocator {
+typedef struct buddy_allocator {
     //void (*alloc)( buddy_allocator_t*, int );
     //void (*free)( buddy_allocator_t*, void* );
     //void (*dump)( buddy_allocator_t* );
@@ -58,13 +56,13 @@ struct buddy_allocator {
     int MAX_ORDER;
 
     char initialized;
-};
+} buddy_allocator_t;
 
 buddy_allocator_t buddy_allocators[ MAX_ALLOCATORS ];
 
-buddy_allocator_t * create_buddy( unsigned long long start, unsigned long long length );
-void *buddy_alloc(buddy_allocator_t *, unsigned long size);
-void buddy_free(buddy_allocator_t *, void *addr);
-void buddy_dump(buddy_allocator_t *);
+buddy_allocator_t * create_buddy( uint64_t start, uint64_t length );
+void *buddy_alloc( buddy_allocator_t *, uint64_t size );
+void buddy_free( buddy_allocator_t *, void *addr );
+void buddy_dump( buddy_allocator_t * );
 
 #endif
