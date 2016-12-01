@@ -1,93 +1,28 @@
-#include "string.h"
-
-void *memcpy(void *dst, const void *src, size_t size)
-{
-	char *d = dst;
-	const char *s = src;
-
-	while (size--)
-		*d++ = *s++;
-	return dst;
-}
+#include <string.h>
 
 size_t strlen(const char *str)
 {
-	const char *pos = str;
+	const char *begin = str;
 
-	while (*pos) ++pos;
-	return pos - str;
+	while (*str++);
+	return str - begin - 1;
 }
 
-static void *memcpy_r(void *dst, const void *src, size_t size)
+void *memcpy(void *dst, const void *src, size_t size)
 {
-	char *d = dst;
-	const char *s = src;
+	char *to = dst;
+	const char *from = src;
 
-	d += size;
-	s += size;
 	while (size--)
-		*(--d) = *(--s);
+		*to++ = *from++;
 	return dst;
 }
 
-void *memmove(void *dst, const void *src, size_t size)
-{ return dst > src ? memcpy_r(dst, src, size) : memcpy(dst, src, size); }
-
-
-void *memset(void *dst, int value, size_t size)
+void *memset(void *dst, int fill, size_t size)
 {
-	char *ptr = dst;
+	char *to = dst;
 
 	while (size--)
-		*ptr++ = value;
+		*to++ = fill;
 	return dst;
-}
-
-int strcmp(const char *l, const char *r)
-{
-	while (*l == *r && *l) {
-		++l;
-		++r;
-	}
-	return *l - *r;
-}
-
-int memcmp(const void *lptr, const void *rptr, size_t size)
-{
-	const char *l = lptr;
-	const char *r = rptr;
-
-	while (size && *l == *r) {
-		++l;
-		++r;
-		--size;
-	}
-
-	return size ? *l - *r : 0;
-}
-
-char *strchr(const char *str, int c)
-{
-	while (*str && *str != c)
-		++str;
-	return *str ? (char *)str : 0;
-}
-
-char *strncpy(char *dst, const char *src, size_t size)
-{
-	char *ret = dst;
-
-	while (size-- && *src)
-		*dst++ = *src++;
-	return ret;
-}
-
-char *strcpy(char *dst, const char *src)
-{
-	char *ret = dst;
-
-	while (*src)
-		*dst++ = *src++;
-	*dst = 0;
-	return ret;
 }

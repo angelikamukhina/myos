@@ -1,65 +1,63 @@
-#include "controller.h"
-#include "ioport.h"
+#include <i8259a.h>
+#include <ioport.h>
 
-#include "serial.h"
+#define PIC_MASTER_CMD	0x20
+#define PIC_MASTER_DATA	0x21
+#define PIC_SLAVE_CMD	0xA0
+#define PIC_SLAVE_DATA	0xA1
 
-#define CMD_MASTER_PORT      0x20
-#define DAT_MASTER_PORT      0x21
-#define CMD_SLAVE_PORT       0xA0
-#define DAT_SLAVE_PORT       0xA1
+#define PIC_SLAVE_IRQ		2
+#define PIC_SLAVE_IRQ_BIT	(1 << PIC_SLAVE_IRQ)
+#define PIC_IRQS		8
 
-static unsigned pic_irq_mask = 0xFFFFu;
+#define PIC_ACK_CMD		0x60
+#define PIC_ICW1_EXPECT_ICW4	(1 << 0)
+#define PIC_ICW1_INIT		(1 << 4)
+#define PIC_ICW4_8086		(1 << 0)
 
-static void contr_config(unsigned offset)
+/* By default mask all PIC inputs except 2-nd input of the master,
+ * since it's used to connect slave chip. */
+static unsigned pic_irq_mask = ~((unsigned)PIC_SLAVE_IRQ_BIT);
+
+void pic_setup(int offset)
 {
-	out8(CMD_MASTER_PORT, (1 << 0) | (1 << 4));
-	out8(CMD_SLAVE_PORT, (1 << 0) | (1 << 4));
-	out8(DAT_MASTER_PORT, offset);
-	out8(DAT_SLAVE_PORT, offset+8);
-	out8(DAT_MASTER_PORT, (1 << 2));
-	out8(DAT_SLAVE_PORT, (1 << 6));
-	out8(DAT_MASTER_PORT, (1 << 0));
-	out8(DAT_SLAVE_PORT, (1 << 0));
-    
-    	out8(DAT_MASTER_PORT, pic_irq_mask & 0xFFU);
-	out8(DAT_SLAVE_PORT, (pic_irq_mask >> 8) & 0xFFU);
+	out8(PIC_MASTER_CMD, PIC_ICW1_EXPECT_ICW4 | PIC_ICW1_INIT);
+	out8(PIC_SLAVE_CMD, PIC_ICW1_EXPECT_ICW4 | PIC_ICW1_INIT);
+	out8(PIC_MASTER_DATA, offset);
+	out8(PIC_SLAVE_DATA, offset + PIC_IRQS);
+	out8(PIC_MASTER_DATA, PIC_SLAVE_IRQ_BIT);
+	out8(PIC_SLAVE_DATA, PIC_SLAVE_IRQ);
+	out8(PIC_MASTER_DATA, PIC_ICW4_8086);
+	out8(PIC_SLAVE_DATA, PIC_ICW4_8086);
+
+	out8(PIC_MASTER_DATA, pic_irq_mask & 0xFFu);
+	out8(PIC_SLAVE_DATA, (pic_irq_mask >> 8) & 0xFFu);
 }
 
-
-static void contr_mask(unsigned irq)
+void pic_mask(int irq)
 {
-    	pic_irq_mask |= 1u << irq;
+	pic_irq_mask |= 1u << irq;
 	if (irq < 8)
-		out8(DAT_MASTER_PORT, pic_irq_mask & 0xFFU);
+		out8(PIC_MASTER_DATA, pic_irq_mask & 0xFFu);
 	else
-		out8(DAT_SLAVE_PORT, (pic_irq_mask >> 8) & 0xFFU);
+		out8(PIC_SLAVE_DATA, (pic_irq_mask >> 8) & 0xFFu);
 }
 
-static void contr_unmask(unsigned irq)
+void pic_unmask(int irq)
 {
 	pic_irq_mask &= ~(1u << irq);
 	if (irq < 8)
-		out8(DAT_MASTER_PORT, pic_irq_mask & 0xFFU);
+		out8(PIC_MASTER_DATA, pic_irq_mask & 0xFFu);
 	else
-		out8(DAT_SLAVE_PORT, (pic_irq_mask >> 8) & 0xFFU);
+		out8(PIC_SLAVE_DATA, (pic_irq_mask >> 8) & 0xFFu);
 }
 
-static void contr_eoi(unsigned irq)
+void pic_ack(int irq)
 {
-    if (irq >= 8)
-    {
-        out8(CMD_SLAVE_PORT, (1 << 5));
-        out8(CMD_MASTER_PORT, (1 << 5) + (1 << 2));
-    } else {
-        out8(CMD_MASTER_PORT, (1 << 5));
-    }
-    
+	if (irq >= 8) {
+		out8(PIC_SLAVE_CMD, PIC_ACK_CMD + (irq & 7));
+		out8(PIC_MASTER_CMD, PIC_ACK_CMD + PIC_SLAVE_IRQ);
+	} else {
+		out8(PIC_MASTER_CMD, PIC_ACK_CMD + irq);
+	}
 }
-
-const struct contr i8259a = {
-    .config = &contr_config,
-    .mask = &contr_mask,
-    .unmask = &contr_unmask,
-    .eoi = &contr_eoi
-};
-
