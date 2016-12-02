@@ -147,8 +147,11 @@ void main(void *bootstrap_info)
 
 	printf("Tests Begin\n");	
 	test_buddy();
+	printf("Test Slab\n");
 	test_slab();
+	printf("Test mem_alloc\n");
 	test_alloc();
+	printf("Test kmap\n");
 	test_kmap();
 	printf("Tests Finished\n");
 

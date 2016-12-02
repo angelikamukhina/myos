@@ -152,7 +152,7 @@ void mem_cache_setup(struct mem_cache *cache, size_t size, size_t align)
 
 	//init locks
 	cache->lock_tail.next = 0;
-	cache->lock_tail.wait = 0;
+	cache->lock_tail.wait = 1;
 	cache->lock.tail = &cache->lock_tail;
 }
 

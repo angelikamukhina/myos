@@ -3,7 +3,7 @@
 
 #include <stdatomic.h>
 
-#define LOCK_NODE_INIT { 0, 0 }
+#define LOCK_NODE_INIT { 0, 1 }
 #define LOCK_INIT(nodename) { &(nodename) }
 
 typedef struct node {
