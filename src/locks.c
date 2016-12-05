@@ -29,5 +29,5 @@ void unlock(struct spinlock *lock, struct node *self)
     while (!(next = atomic_load_explicit(&self->next,
                       memory_order_relaxed)));
   }
-  atomic_store_explicit(&next->wait, 0, memory_order_release);
+  atomic_store_explicit(&next->wait, 1, memory_order_release);
 }
