@@ -3,15 +3,10 @@
 #include <balloc.h>
 #include <debug.h>
 
-#include <locks.h>
-
 #define PAGE_FREE_OFFS	8
 #define PAGE_FREE_MASK	(1ul << PAGE_FREE_OFFS)
 #define PAGE_ORDER_MASK	(PAGE_FREE_MASK - 1)
 #define PAGE_USER_OFFS	16
-
-static spinlock_node_t initnode = LOCK_NODE_INIT;
-static spinlock_t _lock = LOCK_INIT(initnode);
 
 struct list_head page_alloc_zones;
 
@@ -79,6 +74,7 @@ static void __page_alloc_zone_setup(uintptr_t zbegin, uintptr_t zend)
 
 	printf("page alloc zone [0x%llx; 0x%llx]\n", (unsigned long long)begin,
 				(unsigned long long)end);
+	spin_setup(&zone->lock);
 	memset(zone->pages, 0, sizeof(struct page) * (zone->end - zone->end));
 	zone->begin = begin;
 	zone->end = end;
@@ -234,24 +230,15 @@ void page_alloc_setup(void)
 	}
 }
 
-static struct page *page_alloc_zone(struct page_alloc_zone *zone, int order)
+static struct page *__page_alloc_zone(struct page_alloc_zone *zone, int order)
 {
 	int current = order;
-
-	//start critical section
-	spinlock_node_t locknode = LOCK_NODE_INIT;
-	lock(&_lock, &locknode);
 
 	while (list_empty(&zone->order[current]) && current <= MAX_ORDER)
 		++current;
 
 	if (current > MAX_ORDER)
-	{
-		//end critical section
-		unlock(&_lock, &locknode);
-
 		return 0;
-	}
 
 	BUG_ON(list_empty(&zone->order[current]));
 
@@ -272,10 +259,15 @@ static struct page *page_alloc_zone(struct page_alloc_zone *zone, int order)
 		page_set_free(buddy);
 	}
 
-	//end critical section
-	unlock(&_lock, &locknode);
-	//locknode = LOCK_NODE_INIT(locknode);
+	return page;
+}
 
+static struct page *page_alloc_zone(struct page_alloc_zone *zone, int order)
+{
+	const int enable = spin_lock_irqsave(&zone->lock);
+	struct page *page = __page_alloc_zone(zone, order);
+
+	spin_unlock_irqrestore(&zone->lock, enable);
 	return page;
 }
 
@@ -323,16 +315,12 @@ uintptr_t page_alloc(int order)
 	return 0;
 }
 
-static void page_free_zone(struct page_alloc_zone *zone, struct page *page,
+static void __page_free_zone(struct page_alloc_zone *zone, struct page *page,
 			int order)
 {
 	uintptr_t idx = zone->begin + (page - zone->pages);
 
 	BUG_ON(idx & ((1ull << order) - 1));
-
-	//start critical section
-	spinlock_node_t locknode = LOCK_NODE_INIT;
-	lock(&_lock, &locknode);
 
 	while (order < MAX_ORDER) {
 		const uintptr_t bidx = idx ^ (1ull << order);
@@ -358,10 +346,15 @@ static void page_free_zone(struct page_alloc_zone *zone, struct page *page,
 
 	page_set_order(page, order);
 	page_set_free(page);
+}
 
-	//end critical section
-	unlock(&_lock, &locknode);
-	//locknode = LOCK_NODE_INIT(locknode);
+static void page_free_zone(struct page_alloc_zone *zone, struct page *page,
+			int order)
+{
+	const int enable = spin_lock_irqsave(&zone->lock);
+
+	__page_free_zone(zone, page, order);
+	spin_unlock_irqrestore(&zone->lock, enable);
 }
 
 void page_free(uintptr_t addr, int order)

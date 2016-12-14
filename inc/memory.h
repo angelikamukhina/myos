@@ -17,6 +17,8 @@
 
 #include <stdint.h>
 #include <list.h>
+#include <spinlock.h>
+
 
 static inline void *va(uintptr_t phys)
 { return (void *)(phys + HIGHER_BASE); }
@@ -36,6 +38,7 @@ struct page {
 };
 
 struct page_alloc_zone {
+	struct spinlock lock;
 	struct list_head ll;
 	uintptr_t begin;
 	uintptr_t end;

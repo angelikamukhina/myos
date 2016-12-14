@@ -3,14 +3,19 @@
 
 #include <kernel.h>
 
-struct list_head {
+typedef struct list_head {
 	struct list_head *next;
 	struct list_head *prev;
-};
+} list_head_t;
 
 #define LIST_HEAD_INIT(name) { &(name), &(name) }
 #define LIST_HEAD(name) struct list_head name = LIST_HEAD_INIT(name)
 #define LIST_ENTRY(ptr, type, member) CONTAINER_OF(ptr, type, member)
+
+//iterator
+#define list_for_each(pos, head) \
+  for (pos = (head)->next; pos != (head);	\
+       pos = pos->next)
 
 void list_init(struct list_head *head);
 void list_add(struct list_head *new, struct list_head *head);

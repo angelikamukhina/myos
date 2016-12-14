@@ -2,6 +2,7 @@
 #include <ints.h>
 #include <ioport.h>
 #include <print.h>
+#include <threads.h>
 
 #define PIT_CMD		0x43
 #define PIT_CH0_DATA	0x40
@@ -39,11 +40,18 @@ static void pit_set_frequency(unsigned long freq)
 	out8(PIT_CH0_DATA, (div >> 8) & 0xff);
 }
 
+static unsigned long long jiffies;
+
 static void pit_handler(int irq, struct frame *frame)
 {
 	(void) irq;
 	(void) frame;
+	++jiffies;
+	schedule();
 }
+
+unsigned long long current_time(void)
+{ return jiffies; }
 
 void time_setup(void)
 {

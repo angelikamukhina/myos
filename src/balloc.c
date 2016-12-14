@@ -2,13 +2,8 @@
 #include <memory.h>
 #include <debug.h>
 
-
-struct mboot_info {
-	uint32_t flags;
-	uint8_t ignore0[40];
-	uint32_t mmap_size;
-	uint32_t mmap_addr;
-} __attribute__((packed));
+#include <multiboot.h>
+#include <initrd.h>
 
 struct mboot_mmap_entry {
 	uint32_t size;
@@ -16,8 +11,6 @@ struct mboot_mmap_entry {
 	uint64_t length;
 	uint32_t type;
 } __attribute__((packed));
-
-
 
 #define BALLOC_MAX_RANGES	128
 static struct memory_node balloc_nodes[BALLOC_MAX_RANGES];
@@ -222,6 +215,10 @@ static void balloc_parse_mmap(const struct mboot_info *info)
 	__balloc_add_range(&memory_map, kbegin, kend);
 	__balloc_add_range(&free_ranges, kbegin, kend);
 
+	//add initrd region
+	__balloc_add_range(&memory_map, initrd_begin, initrd_end);
+	__balloc_add_range(&free_ranges, initrd_begin, initrd_end);
+
 	ptr = begin;
 	while (ptr + sizeof(struct mboot_mmap_entry) <= end) {
 		const struct mboot_mmap_entry *entry =
@@ -235,6 +232,9 @@ static void balloc_parse_mmap(const struct mboot_info *info)
 	}
 
 	__balloc_remove_range(&free_ranges, kbegin, kend);
+
+	//reserve initrd region
+	__balloc_remove_range(&free_ranges, initrd_begin, initrd_end);
 }
 
 static void __balloc_dump_ranges(const struct rb_tree *tree)
@@ -268,6 +268,7 @@ uintptr_t balloc_memory(void)
 void balloc_setup(const struct mboot_info *info)
 {
 	balloc_setup_nodes();
+	initrd_parse_multiboot(info);
 	balloc_parse_mmap(info);
 	balloc_dump_ranges();
 }

@@ -4,12 +4,12 @@
 #include <alloc.h>
 #include <debug.h>
 
-#include <locks.h>
 
 #define WORD_SZ		sizeof(unsigned long long)
 #define OBJS_PER_WORD	(WORD_SZ * CHAR_BIT)
 #define MIN_POOL_OBJS	8
 #define PAGE_CACHE_BIT	0
+
 
 struct mem_pool {
 	struct list_head ll;
@@ -150,10 +150,7 @@ void mem_cache_setup(struct mem_cache *cache, size_t size, size_t align)
 	list_init(&cache->partial_pools);
 	list_init(&cache->busy_pools);
 
-	//init locks
-	cache->lock_tail.next = 0;
-	cache->lock_tail.wait = 1;
-	cache->lock.tail = &cache->lock_tail;
+	spin_setup(&cache->lock);
 }
 
 void mem_cache_shrink(struct mem_cache *cache)
@@ -161,8 +158,12 @@ void mem_cache_shrink(struct mem_cache *cache)
 	struct list_head free_slabs;
 	struct list_head *head, *ptr;
 
+	const int enable = spin_lock_irqsave(&cache->lock);
+
 	list_init(&free_slabs);
 	list_splice(&cache->free_pools, &free_slabs);
+
+	spin_unlock_irqrestore(&cache->lock, enable);
 
 	head = &free_slabs;
 	ptr = head->next;
@@ -249,12 +250,8 @@ static void mem_pool_free(struct mem_cache *cache, struct mem_pool *pool,
 	BUG_ON(pool->free > cache->obj_count);
 }
 
-void *mem_cache_alloc(struct mem_cache *cache)
+static void *__mem_cache_alloc(struct mem_cache *cache)
 {
-	//start critical section
-	spinlock_node_t locknode = LOCK_NODE_INIT;
-	lock(&cache->lock, &locknode);
-
 	if (!list_empty(&cache->partial_pools)) {
 		struct list_head *ptr = list_first(&cache->partial_pools);
 		struct mem_pool *pool = LIST_ENTRY(ptr, struct mem_pool, ll);
@@ -265,10 +262,6 @@ void *mem_cache_alloc(struct mem_cache *cache)
 			list_del(&pool->ll);
 			list_add(&pool->ll, &cache->busy_pools);
 		}
-
-		//end critical section
-		unlock(&cache->lock, &locknode);
-
 		return data;
 	}
 
@@ -282,39 +275,31 @@ void *mem_cache_alloc(struct mem_cache *cache)
 			list_del(&pool->ll);
 			list_add(&pool->ll, &cache->partial_pools);
 		}
-
-		//end critical section
-		unlock(&cache->lock, &locknode);
-
 		return data;
 	}
 
 	struct mem_pool *pool = mem_pool_create(cache);
 
 	if (!pool)
-	{
-		//end critical section
-		unlock(&cache->lock, &locknode);
-
 		return 0;
-	}
 
 	void *data = mem_pool_alloc(cache, pool);
 
 	list_add(&pool->ll, &cache->partial_pools);
-
-	//end critical section
-	unlock(&cache->lock, &locknode);
-
 	return data;
 }
 
-void mem_cache_free(struct mem_cache *cache, void *ptr)
+void *mem_cache_alloc(struct mem_cache *cache)
 {
-	//start critical section
-	spinlock_node_t locknode = LOCK_NODE_INIT;
-	lock(&cache->lock, &locknode);
+	const int enable = spin_lock_irqsave(&cache->lock);
+	void *ptr = __mem_cache_alloc(cache);
 
+	spin_unlock_irqrestore(&cache->lock, enable);
+	return ptr;
+}
+
+static void __mem_cache_free(struct mem_cache *cache, void *ptr)
+{
 	const size_t pool_size = (size_t)1 << (cache->pool_order + PAGE_SHIFT);
 	const uintptr_t addr = align_down((uintptr_t)ptr, pool_size);
 	struct mem_pool *pool = (struct mem_pool *)(addr + cache->meta_offs);
@@ -330,9 +315,14 @@ void mem_cache_free(struct mem_cache *cache, void *ptr)
 		list_del(&pool->ll);
 		list_add(&pool->ll, &cache->free_pools);
 	}
+}
 
-	//end critical section
-	unlock(&cache->lock, &locknode);
+void mem_cache_free(struct mem_cache *cache, void *ptr)
+{
+	const int enable = spin_lock_irqsave(&cache->lock);
+
+	__mem_cache_free(cache, ptr);
+	spin_unlock_irqrestore(&cache->lock, enable);
 }
 
 

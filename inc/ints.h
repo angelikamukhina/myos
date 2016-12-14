@@ -37,6 +37,15 @@ static inline void disable_ints(void)
 static inline void enable_ints(void)
 { __asm__ volatile ("sti" : : : "cc"); }
 
+static inline int ints_enabled(void)
+{
+	static const unsigned long RFLAGS_IF = (1ul << 9);
+	unsigned long flags;
+
+	__asm__ volatile ("pushfq ; pop %0" : "=rm"(flags) : : "memory");
+	return (flags & RFLAGS_IF) != 0;
+}
+
 void ints_setup(void);
 void register_error_handler(int error, error_handler_t handler);
 void register_irq_handler(int irq, irq_handler_t handler);

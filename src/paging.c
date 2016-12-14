@@ -6,9 +6,6 @@
 #include <debug.h>
 #include <alloc.h>
 
-static spinlock_node_t initnode = LOCK_NODE_INIT;
-static spinlock_t _lock = LOCK_INIT(initnode);
-
 
 struct page_pool {
 	uintptr_t (*get_page)(struct page_pool *);
@@ -322,17 +319,13 @@ static struct kmap_range *kmap_alloc_range(size_t pages)
 }
 
 
-void *kmap(struct page **pages, size_t count)
+static void *__kmap(struct page **pages, size_t count)
 {
 	if (!count)
 		return 0;
 
 	if (count == 1)
 		return va(page_addr(pages[0]));
-
-	//start critical section
-	spinlock_node_t locknode = LOCK_NODE_INIT;
-	lock(&_lock, &locknode);
 
 	struct kmap_range *range = kmap_alloc_range(count);
 
@@ -352,20 +345,13 @@ void *kmap(struct page **pages, size_t count)
 		flush_tlb_addr((const void *)addr);
 	}
 
-	//end critical section
-	unlock(&_lock, &locknode);
-
 	return kmap_addr(range);
 }
 
-void kunmap(void *ptr)
+static void __kunmap(void *ptr)
 {
 	if ((uintptr_t)ptr < KMAP_BEGIN || (uintptr_t)ptr >= KMAP_END)
 		return;
-
-	//start critical section
-	spinlock_node_t locknode = LOCK_NODE_INIT;
-	lock(&_lock, &locknode);
 
 	const uintptr_t pml4 = read_cr3();
 
@@ -393,9 +379,6 @@ void kunmap(void *ptr)
 	}
 
 	kmap_free_range(range, range->pages);
-
-	//end critical section
-	unlock(&_lock, &locknode);
 }
 
 static uintptr_t kmap_setup_get_page(struct page_pool *pool)
@@ -410,6 +393,26 @@ static uintptr_t kmap_setup_get_page(struct page_pool *pool)
 	return addr;	
 }
 
+
+static struct spinlock kmap_lock;
+
+void *kmap(struct page **pages, size_t count)
+{
+	const int enable = spin_lock_irqsave(&kmap_lock);
+	void *ptr = __kmap(pages, count);
+
+	spin_unlock_irqrestore(&kmap_lock, enable);
+	return ptr;
+}
+
+void kunmap(void *ptr)
+{
+	const int enable = spin_lock_irqsave(&kmap_lock);
+
+	__kunmap(ptr);
+	spin_unlock_irqrestore(&kmap_lock, enable);
+}
+
 void kmap_setup(void)
 {
 	static const size_t size = sizeof(struct kmap_range);
@@ -421,6 +424,8 @@ void kmap_setup(void)
 	pt_populate_pages(pte, KMAP_BEGIN, KMAP_END, &pool);
 	kmap_ranges = mem_alloc(size * KMAP_PAGES);
 	BUG_ON(!kmap_ranges);
+
+	spin_setup(&kmap_lock);
 
 	for (int i = 0; i != KMAP_ORDERS; ++i)
 		list_init(&kmap_free_ranges[i]);

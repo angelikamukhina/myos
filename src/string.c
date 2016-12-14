@@ -26,3 +26,36 @@ void *memset(void *dst, int fill, size_t size)
 		*to++ = fill;
 	return dst;
 }
+
+int memcmp(const void *lptr, const void *rptr, size_t size)
+{
+	const char *l = lptr;
+	const char *r = rptr;
+
+	while (size && *l == *r) {
+		++l;
+		++r;
+		--size;
+	}
+
+	return size ? *l - *r : 0;
+}
+
+int strcmp(const char *l, const char *r)
+{
+	while (*l == *r && *l) {
+		++l;
+		++r;
+	}
+	return *l - *r;
+}
+
+char *strcpy(char *dst, const char *src)
+{
+	char *ret = dst;
+
+	while (*src)
+		*dst++ = *src++;
+	*dst = 0;
+	return ret;
+}
