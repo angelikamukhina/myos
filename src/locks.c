@@ -9,7 +9,7 @@ void lock(struct spinlock *lock, struct node *self)
   struct node *tail = atomic_exchange_explicit(&lock->tail, self,
                         memory_order_acq_rel);
 
-  if (!tail || tail->wait)
+  if (!tail || (!tail->next && tail->wait))
     return;
 
   atomic_store_explicit(&tail->next, self, memory_order_relaxed);
@@ -29,5 +29,5 @@ void unlock(struct spinlock *lock, struct node *self)
     while (!(next = atomic_load_explicit(&self->next,
                       memory_order_relaxed)));
   }
-  atomic_store_explicit(&next->wait, 0, memory_order_release);
+  atomic_store_explicit(&next->wait, 1, memory_order_release);
 }
