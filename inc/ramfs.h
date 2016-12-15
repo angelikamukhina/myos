@@ -122,7 +122,7 @@ typedef struct fs_direntry {
 void ramfs_init(ramfs_t * fs, size_t ramfs_size);
 void ramfs_destroy(ramfs_t * fs);
 fs_desc_t ramfs_open(ramfs_t * fs, const char * full_path);
-void ramfs_fread(void * ptr, size_t size, size_t count, fs_desc_t * desc);
+size_t ramfs_fread(void * ptr, size_t size, size_t count, fs_desc_t * desc);
 fs_direntry_t ramfs_readdir(fs_desc_t * desc);
 void ramfs_fwrite(const void * ptr, size_t size, size_t count, fs_desc_t * desc);
 void ramfs_close(fs_desc_t * desc);

@@ -465,6 +465,13 @@ fs_direntry_t ramfs_readdir(fs_desc_t * desc)
 {
     fs_direntry_t result;
 
+    if ( desc->type != fs_dir )
+    {
+        result.type = fs_entry_end;
+	desc->type = fs_error_occured;
+        return result;
+    }
+
     fs_block_t * curr_entry_headblock;
 
     const int enable = spin_lock_irqsave(&desc->fs->lock);
@@ -600,6 +607,13 @@ void ramfs_fwrite(const void * ptr, size_t size, size_t count, fs_desc_t * desc)
     const uint8_t * data_ptr = ptr;
     for ( size_t i = 0, bytes_to_write, free_bytes_in_block = FS_BLOCK_DATA_SIZE - last_file_block->file_contpart.data_len; i < data_length; )
     {
+	debug_print("ramfs_fwrite curr block type %d\n", last_file_block->type);
+	if ( last_file_block->type == fs_file_head )
+	{
+	    last_file_block = LIST_ENTRY( last_file_block->file_contpart.parts_list.next, fs_block_t, file_contpart.parts_list );
+            free_bytes_in_block = FS_BLOCK_DATA_SIZE;
+	}
+
         if ( !( ( data_length - i ) / ( free_bytes_in_block + 1 ) ) )
         {
             bytes_to_write = ( data_length - i ) % ( free_bytes_in_block + 1 );
@@ -634,16 +648,18 @@ void ramfs_fwrite(const void * ptr, size_t size, size_t count, fs_desc_t * desc)
         return;
     }
 
+    ramfs_open_init_readpos( desc );
+
     spin_unlock_irqrestore(&desc->fs->lock, enable);
     //ramfs_open_init_readpos( desc );
 }
 
-void ramfs_fread(void * ptr, size_t size, size_t count, fs_desc_t * desc)
+size_t ramfs_fread(void * ptr, size_t size, size_t count, fs_desc_t * desc)
 {
     if ( desc->type != fs_file )
     {
         printf("Attempt to apply ramfs_fread to not fs_file descriptor!\n");
-        return;
+        return 0;
     }
 #ifdef RAMFS_DEBUG
     //debug_print( "Reading file...\n" );
@@ -652,7 +668,7 @@ void ramfs_fread(void * ptr, size_t size, size_t count, fs_desc_t * desc)
     if ( list_empty(desc->file.curr_read_block) )
     {
         debug_print("fread: File is empty!\n");
-        return;
+        return 0;
     }
 
     size_t data_length = size * count;
@@ -679,22 +695,39 @@ void ramfs_fread(void * ptr, size_t size, size_t count, fs_desc_t * desc)
         {
             bytes_to_read = curr_read_block->file_contpart.data_len - desc->file.curr_read_block_pos;
         }
-        //debug_print("%lu bytes of data in block available!\n", curr_read_block->file_contpart.data_len);
+        debug_print("%lu bytes of data in block available! (block type %d)\n", curr_read_block->file_contpart.data_len, curr_read_block->type);
 
         memcpy(data_ptr, curr_block_data, bytes_to_read);
         data_ptr += bytes_to_read;
         i += bytes_to_read;
 
         //desc->file.curr_read_block = &curr_read_block->file_contpart.parts_list;
-        //debug_print("%lu bytes read from block!\n", bytes_to_read);
+        debug_print("%lu bytes read from block!\n", bytes_to_read);
 
         desc->file.curr_read_block_pos += bytes_to_read;
 
-        //debug_print("%lu %lu\n", desc->file.curr_read_block_pos, curr_read_block->file_contpart.data_len);
+        debug_print("%lu %lu\n", desc->file.curr_read_block_pos, curr_read_block->file_contpart.data_len);
         if ( desc->file.curr_read_block_pos == curr_read_block->file_contpart.data_len )
         {
             curr_read_block = LIST_ENTRY( curr_read_block->file_contpart.parts_list.next, fs_block_t, file_contpart.parts_list );
             curr_block_data = curr_read_block->file_contpart.data;
+
+	    debug_print("check that next block is head!\n");
+	    //if ( &curr_read_block->file_contpart.parts_list == desc->file.parts_list_file_head )
+	    if ( curr_read_block->type == fs_file_head )
+	    {
+                if ( i != data_length )
+                {
+                    desc->type = fs_error_occured;
+                } else {
+                    ramfs_open_init_readpos( desc );
+		}
+
+                debug_print("next read part list is a file head! %d bytes read (need %d)\n", i, data_length);
+                spin_unlock_irqrestore(&desc->fs->lock, enable);
+
+                return i;
+	    }
 
             desc->file.curr_read_block = &curr_read_block->file_contpart.parts_list;
             desc->file.curr_read_block_pos = 0;
@@ -709,5 +742,7 @@ void ramfs_fread(void * ptr, size_t size, size_t count, fs_desc_t * desc)
     }
 
     spin_unlock_irqrestore(&desc->fs->lock, enable);
+
+    return i;
 }
 

@@ -5,7 +5,7 @@
 #include <print.h>
 #include <initramfs.h>
 #include <ramfs.h>
-#include <balloc.h>
+#include <memory.h>
 #include <stdbool.h>
 #include <memory.h>
 #include <stdlib.h>
@@ -118,5 +118,5 @@ void setup_initramfs(void)
 	//initrd_begin - physical address
 	extract_cpio(va(initrd_begin), initrd_end - initrd_begin);
 
-	balloc_free(initrd_begin, initrd_end);
+	__page_alloc_zone_free(initrd_begin, initrd_end);
 }

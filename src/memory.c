@@ -145,7 +145,7 @@ struct page *addr_page(uintptr_t addr)
 	return 0;
 }
 
-static void __page_alloc_zone_free(uintptr_t zbegin, uintptr_t zend)
+void __page_alloc_zone_free(uintptr_t zbegin, uintptr_t zend)
 {
 	const uintptr_t page_mask = ~((uintptr_t)PAGE_MASK);
 	const uintptr_t begin_addr = (zbegin + PAGE_SIZE - 1) & page_mask;

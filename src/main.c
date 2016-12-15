@@ -61,8 +61,8 @@ void ramfs_simple_r_test(ramfs_t * fs, const char * file_path)
     memset(data, 0, test_len);
 
     desc = ramfs_open(fs, file_path);
-    ramfs_fread(data,1,test_len,&desc);
-    printf("SIMPLE READ TEST: %s\n", data);
+    size_t readed = ramfs_fread(data,1,test_len+10,&desc);
+    printf("SIMPLE READ TEST(%d bytes / %d real): (%d requested) %s\n", readed, test_len, test_len+10, data);
     if ( !!memcmp(test_str, data, test_len) )
     {
         printf("FAIL ramfs_simple_r_test\n");
@@ -93,7 +93,7 @@ void ramfs_big_writeread_test(ramfs_t * fs, const char * file_path)
     }
 
     size_t test_read_shift = 2322;
-    for ( test_read_shift = 0; test_read_shift < test_len /2; test_read_shift++ )
+    for ( test_read_shift = 0; test_read_shift <= test_len/2; test_read_shift++ )
     {
         ramfs_fread(test_out,1,test_read_shift,&desc);
         ramfs_fread(test_out+test_read_shift,1,test_len - test_read_shift,&desc);

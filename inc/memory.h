@@ -59,6 +59,8 @@ uintptr_t page_alloc(int order);
 void __page_free(struct page *page, int order);
 void page_free(uintptr_t addr, int order);
 
+void __page_alloc_zone_free(uintptr_t zbegin, uintptr_t zend);
+
 #endif /*__ASM_FILE__*/
 
 #endif /*__MEMORY_H__*/
