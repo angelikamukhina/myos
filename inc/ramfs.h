@@ -5,6 +5,7 @@
 
 #include <list.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 //#define RAMFS_DEBUG 1
 
@@ -84,6 +85,7 @@ typedef enum fs_desc_type {
 } fs_desc_type_t;
 
 typedef struct fs_desc_file {
+    bool eof;
     list_head_t * parts_list_file_head;
     list_head_t * curr_read_block;
     size_t curr_read_block_pos;

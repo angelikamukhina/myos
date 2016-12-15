@@ -366,6 +366,7 @@ static void ramfs_open_init_readpos( fs_desc_t * desc )
 {
     desc->file.curr_read_block = desc->file.parts_list_file_head->next;
     desc->file.curr_read_block_pos = 0;
+    desc->file.eof = false;
 }
 
 void ramfs_close(fs_desc_t * desc)
@@ -718,7 +719,7 @@ size_t ramfs_fread(void * ptr, size_t size, size_t count, fs_desc_t * desc)
 	    {
                 if ( i != data_length )
                 {
-                    desc->type = fs_error_occured;
+                    desc->file.eof = true;
                 } else {
                     ramfs_open_init_readpos( desc );
 		}
