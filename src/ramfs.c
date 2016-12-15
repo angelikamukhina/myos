@@ -717,12 +717,11 @@ size_t ramfs_fread(void * ptr, size_t size, size_t count, fs_desc_t * desc)
 	    //if ( &curr_read_block->file_contpart.parts_list == desc->file.parts_list_file_head )
 	    if ( curr_read_block->type == fs_file_head )
 	    {
-                if ( i != data_length )
+                if ( i == data_length )
                 {
-                    desc->file.eof = true;
-                } else {
                     ramfs_open_init_readpos( desc );
 		}
+		desc->file.eof = true;
 
                 debug_print("next read part list is a file head! %d bytes read (need %d)\n", i, data_length);
                 spin_unlock_irqrestore(&desc->fs->lock, enable);
