@@ -413,42 +413,34 @@ static void test_syscalls()
 
 static void __userth_main(void * data)
 {
-	(void) data;
-	//printf("%lx\n", data);
-	printf("%s", (char *)data);
-
-	force_schedule();
-
+	//while(1);
 	//use syscall
 	const char * test_str = "Hello from userspace syscall!\n";
 	//(void) test_str;
 	syscall(0, test_str, strlen(test_str));
+	syscall(0, test_str, strlen(test_str));
+
+	test_str = "Message printed two times? OK. EOF userspace function\n";
+	syscall(0, test_str, strlen(test_str));
+	while(1);
 
 	//check that we in user mode
 	//__asm__ volatile("int $127" : :);
-	printf("EOF userspace syscall test\n");
+	//printf("EOF userspace syscall test\n");
+
+	(void) data;
 }
 
 static void userspace_thread_create()
 {
-	/*
-	char test_str[] = "I'm in userspace!\n";
-	size_t test_len = strlen(test_str);
-	char * data = mem_alloc( test_len );
-	strcpy(data, test_str);
-	//memset(data, 0, test_len);
-	//printf("%lx\n", data);
-	//printf("%s\n", (char *)data);
-	*/
 	printf("START userspace syscall test\n");
 	struct thread *th = userthread_create(&__userth_main, "I'm in userspace!\n");
 	(void) th;
 
 	thread_activate(th);
 	thread_destroy(th);
-	//thread_activate(th);
+
 	printf("userspace_thread_create FINISHED\n");
-	//mem_free( data );
 }
 
 void main(void *bootstrap_info)
@@ -469,14 +461,9 @@ void main(void *bootstrap_info)
 	enable_ints();
 
 	printf("Tests Begin\n");
-	test_syscalls();
 
-	//check that we not cracked all
-	test_threads();
-	
-	userspace_thread_create();
-	//printf("while(1);\n");
-	while(1);
+
+
 	ramfs_init_tests(&fs);
 	test_buddy();
 	test_slab();
@@ -485,6 +472,12 @@ void main(void *bootstrap_info)
 	test_threads();
 	test_mutex();
 	test_condition();
+
+	test_syscalls();
+	//check that we not cracked all
+	test_threads();
+	userspace_thread_create();
+
 	printf("Tests Finished\n");
 
 	idle();

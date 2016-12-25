@@ -11,11 +11,25 @@
 #include <print.h>
 
 #include <memory.h>
+#include <paging.h>
 
-//!!! for debug purposes
-#include <serial.h>
-#include <ioport.h>
-#include <syscall.h>
+#define TSS		   0x28
+#define ALL_BITS           (~((uintmax_t)0))
+#define BITS_CONST(hi, lo) ((BIT_CONST((hi) + 1) - 1) & (ALL_BITS << (lo)))
+#define BIT_CONST(p)       ((uintmax_t)1 << (p))
+
+//AMD64 arch programmer manual vol 2 page 339
+//100 bytes
+struct tss {
+	uint32_t skip0;
+	uint64_t rsp;
+	uint64_t skip1[10];
+	uint16_t skip2;
+	uint16_t iomap_base;
+} __attribute__((packed));
+
+//we get big problems without alignment
+static struct tss tss __attribute__((aligned (PAGE_SIZE)));
 
 struct iretdata {
 	uint64_t rip;
@@ -64,7 +78,7 @@ void *thread_stack_begin(struct thread *thread)
 	if (thread == init_thread)
 		return bootstrap_stack_begin;
 
-	return (void *)page_addr(thread->stack);
+	return (void *)pa((void*)thread->stack_addr);//page_addr(thread->stack);
 }
 
 void *thread_stack_end(struct thread *thread)
@@ -97,6 +111,80 @@ void enable_preempt(void)
 	atomic_fetch_sub_explicit(&preempt_cnt, 1, memory_order_relaxed);
 }
 
+//for that desc reserved space in gdt (bootstrap.S)
+struct tss_desc {
+	uint64_t low;
+	uint64_t high;
+} __attribute((packed));
+
+static void setup_tss_desc(struct tss_desc *desc, struct tss *tss)
+{
+	const uint64_t limit = sizeof(*tss) - 1;
+	const uint64_t base = (uint64_t)tss;
+
+	//magic
+	//Intel 64 IA-32 arch soft manual page 307
+	//Format of TSS and LDT desc in long mode
+	//System-Segment and Gate-Descriptor Types page 113
+	desc->low = (limit & BITS_CONST(15, 0))
+			| ((base & BITS_CONST(15, 0)) << 16)
+			| ( (
+			((base & BITS_CONST(23, 15)) << 16)
+			//15 - present
+			//8,11 - descriptor type accroding TSS
+			//13,14 - DPL = 3
+			| ((BIT_CONST(8) | BIT_CONST(11) | BIT_CONST(13) | BIT_CONST(14) | BIT_CONST(15)) << 32)
+			| ((limit & BITS_CONST(19, 16)) << 32)
+			| ((base & BITS_CONST(31, 24)) << 32)
+			//granularity to 0
+			) & ((BIT_CONST(23) ^ BITS_CONST(31, 0)) << 32) );
+	desc->high = base >> 32;
+}
+
+static void load_tr(unsigned short sel)
+{ __asm__ ("ltr %0" : : "a"(sel)); }
+
+struct gdt_ptr {
+	uint16_t size;
+	uint64_t addr;
+} __attribute__((packed));
+
+static inline void *get_gdt_ptr(void)
+{
+	struct gdt_ptr ptr;
+
+	__asm__("sgdt %0" : "=m"(ptr));
+	return (void *)ptr.addr;
+}
+
+static void update_tss_rsp(uint64_t new_stack)
+{
+	//return;
+	tss.rsp = new_stack;
+}
+
+static void setup_tss(void)
+{
+	extern char bootstrap_stack_top[];
+
+	const int tss_sel = TSS;
+	const int tss_entry = TSS >> 3; //magic constants
+
+	struct tss_desc desc;
+	uint64_t *gdt = get_gdt_ptr();
+
+	memset(&tss, 0, sizeof(tss));
+	update_tss_rsp((uint64_t)bootstrap_stack_top); //very important
+
+	setup_tss_desc(&desc, &tss);
+
+	//write to gdt
+	memcpy(gdt + tss_entry, &desc, sizeof(desc));
+
+	//set TSS selectors
+	load_tr(tss_sel);
+}
+
 void threads_setup(void)
 {
 	const size_t size = sizeof(struct thread);
@@ -112,6 +200,8 @@ void threads_setup(void)
 
 	//back up ptr to main thread
 	init_thread = current;
+
+	setup_tss();
 }
 
 static void place_thread(struct thread *next)
@@ -128,6 +218,9 @@ static void place_thread(struct thread *next)
 
 	current = next;
 	next->time = current_time();
+
+	//write in TSS
+	//update_tss_rsp( (uintptr_t)va( (uintptr_t)thread_stack_end(current) ) );
 }
 
 void thread_entry(struct thread *thread, void (*fptr)(void *), void *arg)
@@ -139,130 +232,80 @@ void thread_entry(struct thread *thread, void (*fptr)(void *), void *arg)
 	//thread_exit();
 }
 
+typedef enum thread_type {
+	THREAD_KERNEL,
+	THREAD_USER
+} thread_type_t;
+
+static void __empty() {}
+
+struct thread *____thread_create(void (*fptr)(void *), void *arg, int order, thread_type_t type)
+{
+	void __thread_entry(void);
+
+	const size_t stack_size = (size_t)1 << (PAGE_SHIFT + order);
+
+	struct page *stack = __page_alloc(order);
+	uintptr_t stack_addr = (uintptr_t)va(page_addr(stack));
+
+	if (!stack)
+		return 0;
+
+	if ( type == THREAD_USER ) {
+		struct page * pages[2];
+		pages[0] = stack;
+		//small hack
+		struct page *tmp = __page_alloc(order);
+		pages[1] = tmp;
+		// | PTE_USER flag to mapping
+		//this is not cool, but kmap_user can't set privileges for one page
+		stack_addr = (uintptr_t)kmap_user(pages, 2);
+		//stack_addr = 0;
+	}
+
+	struct thread *thread = thread_alloc();
+	struct thread_switch_frame *frame;
+
+	thread->stack = stack;
+	thread->stack_order = order;
+	thread->stack_addr = stack_addr;
+	thread->stack_ptr = thread->stack_addr + stack_size - sizeof(*frame);
+	thread->state = THREAD_BLOCKED;
+
+	frame = (struct thread_switch_frame *)thread->stack_ptr;
+
+	if ( type == THREAD_KERNEL ) {
+		frame->stack.cs = KERNEL_CS;
+		frame->stack.ss = KERNEL_DS;
+		frame->stack.rip = (uintptr_t)thread_exit; //exit after fptr executed
+	} else {
+		frame->stack.cs = USER_CS;
+		frame->stack.ss = USER_DS;
+		frame->stack.rip = (uintptr_t)fptr; // this function runs in user mode
+	}
+
+	frame->stack.rflags = (1ul << 2);
+	frame->stack.rsp = (uintptr_t)va((uintptr_t)thread_stack_end(thread));
+
+	frame->r12 = (uintptr_t)thread;
+
+	if ( type == THREAD_KERNEL ) {
+		frame->r13 = (uintptr_t)fptr;
+	} else {
+		frame->r13 = (uintptr_t)__empty; //not run anything before we jump to ring3
+	}
+
+	frame->r14 = (uintptr_t)arg;
+
+	frame->rbp = 0;
+	frame->rflags = (1ul << 2);
+	frame->rip = (uintptr_t)__thread_entry;
+	return thread;
+}
+
 struct thread *__thread_create(void (*fptr)(void *), void *arg, int order)
 {
-	void __thread_entry(void);
-
-	const size_t stack_size = (size_t)1 << (PAGE_SHIFT + order);
-	struct page *stack = __page_alloc(order);
-
-	if (!stack)
-		return 0;
-
-	struct thread *thread = thread_alloc();
-	struct thread_switch_frame *frame;
-
-	thread->stack = stack;
-	thread->stack_order = order;
-	thread->stack_addr = (uintptr_t)va(page_addr(stack));
-	thread->stack_ptr = thread->stack_addr + stack_size - sizeof(*frame);
-	thread->state = THREAD_BLOCKED;
-
-	frame = (struct thread_switch_frame *)thread->stack_ptr;
-
-	frame->stack.cs = KERNEL_CS;
-	frame->stack.ss = KERNEL_DS;
-	frame->stack.rflags = (1ul << 2);
-	frame->stack.rip = (uintptr_t)thread_exit;
-	frame->stack.rsp = (uintptr_t)va((uintptr_t)thread_stack_end(thread));
-
-	frame->r12 = (uintptr_t)thread;
-	frame->r13 = (uintptr_t)fptr;
-	frame->r14 = (uintptr_t)arg;
-
-	frame->rbp = 0;
-	frame->rflags = (1ul << 2);
-	frame->rip = (uintptr_t)__thread_entry;
-	return thread;
-}
-
-void hmhm()
-{
-	//if we uncomment this with USER_CS, USER_DS combination we get tripple fault...
-	//write char to serial port directly and not correct (without checking busy status)
-	//__asm__ volatile("outb %0, %1" : : "a"((uint8_t)'3'), "d"((unsigned short)0x3f8));
-	
-	//wait in that cycle
-	while(1);
-	const char * test_str = "Hello from syscall (write)!\n";
-	syscall(0, test_str, strlen(test_str));
-
-
-	
-	//serial_putchar('3');
-	//out8(0x3f8, '3');
-	while(1);
-}
-
-void test()
-{
-	//even with this line we get GPF...
-	//but (!) tripple don't...
-	//while(1);
-
-	//in that function we get in user mode
-	//test asm operations that will not cause fail
-	__asm__ volatile("addq $0x10, %%rdi" : :);
-	__asm__ volatile("addq $0x10, %%rax" : :);
-	__asm__ volatile("addq $0x10, %%rsp" : :);
-	__asm__ volatile("pushq $123" : :);
-	uint64_t test  = (uint64_t)&printf;
-	hmhm();
-	(void) test;
-	//while(1);
-	//__asm__ volatile("int $127" : :);
-	printf("test()\n");
-	//	struct thread *self = thread_current();
-
-	//self->state = THREAD_FINISHING;
-	while (1)
-		force_schedule();
-}
-
-struct thread *__userthread_create(void (*fptr)(void *), void *arg, int order)
-{
-	void __thread_entry(void);
-
-	const size_t stack_size = (size_t)1 << (PAGE_SHIFT + order);
-	struct page *stack = __page_alloc(order);
-
-	if (!stack)
-		return 0;
-
-	struct thread *thread = thread_alloc();
-	struct thread_switch_frame *frame;
-
-	thread->stack = stack;
-	thread->stack_order = order;
-	thread->stack_addr = (uintptr_t)va(page_addr(stack));
-	thread->stack_ptr = thread->stack_addr + stack_size - sizeof(*frame);
-	thread->state = THREAD_BLOCKED;
-
-	frame = (struct thread_switch_frame *)thread->stack_ptr;
-if (0) {
-	frame->stack.cs = KERNEL_CS;
-	frame->stack.ss = KERNEL_DS;
-} else {
-	//we get GPF with USER_CS, KERNEL_DS combination
-	
-	//we get tripple fault with USER_CS, USER_CS combination
-	
-	frame->stack.cs = USER_CS;
-	frame->stack.ss = USER_DS;//must be USER_DS; but all system fails and reboot
-}
-	frame->stack.rflags = (1ul << 2);
-	//frame->stack.rip = (uintptr_t)thread_exit;
-	frame->stack.rip = (uintptr_t)test;//(uintptr_t)thread_exit;
-	frame->stack.rsp = (uintptr_t)va((uintptr_t)thread_stack_end(thread));
-
-	frame->r12 = (uintptr_t)thread;
-	frame->r13 = (uintptr_t)fptr;
-	frame->r14 = (uintptr_t)arg;
-
-	frame->rbp = 0;
-	frame->rflags = (1ul << 2);
-	frame->rip = (uintptr_t)__thread_entry;
-	return thread;
+	return ____thread_create(fptr, arg, order, THREAD_KERNEL);
 }
 
 struct thread *thread_create(void (*fptr)(void *), void *arg)
@@ -272,7 +315,7 @@ struct thread *thread_create(void (*fptr)(void *), void *arg)
 
 struct thread *userthread_create(void (*fptr)(void *), void *arg)
 {
-	return __userthread_create(fptr, arg, STACK_ORDER);
+	return ____thread_create(fptr, arg, STACK_ORDER, THREAD_USER);
 }
 
 void thread_destroy(struct thread *thread)
@@ -295,7 +338,7 @@ void thread_activate(struct thread *thread)
 
 void thread_exit(void)
 {
-	printf("thread_exit()\n");
+	//printf("thread_exit()\n");
 	struct thread *self = thread_current();
 
 	self->state = THREAD_FINISHING;

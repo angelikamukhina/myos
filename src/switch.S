@@ -12,6 +12,7 @@ __thread_entry:
 	movq %r13, %rsi
 	movq %r14, %rdx
 	call thread_entry
+
 	iretq #pop's SS,RSP,RFLAGS,CS,RIP
 
 

@@ -7,9 +7,7 @@ static int write(const char *data, size_t size)
 {
 //printf("write called size: %d, data: %s\n", size, data);
 	while (size--)
-	{
 		serial_putchar(*data++);
-	}
 
 	return 0;
 }

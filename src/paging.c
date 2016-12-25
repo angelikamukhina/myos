@@ -141,11 +141,11 @@ static void pt_map_pages(pte_t *pml4, uintptr_t begin, uintptr_t end,
 {
 	BUG_ON(begin & PAGE_MASK);
 	BUG_ON(end & PAGE_MASK);
-//!
+
 	/* We pass end - 1 to avoid overflows, and __pt_map_pages assumes
 	 * both ends of the interval are included in the interval. */
 	__pt_map_pages(pml4, begin, end - 1, phys,
-				flags | __PTE_PRESENT | __PTE_LARGE | PTE_USER, 4, pool);
+				flags | __PTE_PRESENT | __PTE_LARGE, 4, pool);
 }
 
 static void pt_populate_pages(pte_t *pml4, uintptr_t begin, uintptr_t end,
@@ -200,10 +200,10 @@ void paging_setup(void)
 	struct page_pool pool = { &paging_setup_get_page, 0 };
 	const uintptr_t pml4 = pool_get_page(&pool);
 	pte_t *pte = va(pml4);
-//!! PTE_USER add flag to two calls
-	pt_map_pages(pte, HIGHER_BASE, HIGHER_BASE + mem_size, 0,
-				PTE_WRITE | PTE_USER, &pool);
 
+	pt_map_pages(pte, HIGHER_BASE, HIGHER_BASE + mem_size, 0,
+				PTE_WRITE, &pool);
+	//PTE_USER flag add
 	pt_map_pages(pte, VIRTUAL_BASE, 0, 0, PTE_WRITE | PTE_USER, &pool);
 	write_cr3(pml4);
 
@@ -318,11 +318,26 @@ static struct kmap_range *kmap_alloc_range(size_t pages)
 	return range;
 }
 
+typedef enum pageaccess_type {
+	PAGE_KERNEL,
+	PAGE_USER
+} pageaccess_type_t;
 
-static void *__kmap(struct page **pages, size_t count)
+static void *____kmap(struct page **pages, size_t count, pageaccess_type_t access)
 {
 	if (!count)
 		return 0;
+
+	const uintptr_t pml4 = read_cr3();
+	pte_t *pte = va(pml4);
+
+	pte_t flags = PTE_WRITE;
+
+	if (access == PAGE_USER) {
+		flags |= PTE_USER;
+	}
+
+	uintptr_t addr;
 
 	if (count == 1)
 		return va(page_addr(pages[0]));
@@ -332,22 +347,24 @@ static void *__kmap(struct page **pages, size_t count)
 	if (!range)
 		return 0;
 
-	const uintptr_t pml4 = read_cr3();
-	pte_t *pte = va(pml4);
-
 	const uintptr_t from = (uintptr_t)kmap_addr(range);
 	const uintptr_t to = from + count * PAGE_SIZE;
 	int i = 0;
-//!!!
-	for (uintptr_t addr = from; addr != to; addr += PAGE_SIZE) {
+
+	for (addr = from; addr != to; addr += PAGE_SIZE) {
 		pt_map_pages(pte, addr, addr + PAGE_SIZE,
-					page_addr(pages[i++]), PTE_WRITE | PTE_USER, 0);//
+					page_addr(pages[i++]), flags, 0);//PTE_WRITE, 0);
 		flush_tlb_addr((const void *)addr);
 	}
 
 	return kmap_addr(range);
 }
-
+/*
+static void *__kmap(struct page **pages, size_t count)
+{
+	return ____kmap(pages, count, PAGE_KERNEL);
+}
+*/
 static void __kunmap(void *ptr)
 {
 	if ((uintptr_t)ptr < KMAP_BEGIN || (uintptr_t)ptr >= KMAP_END)
@@ -396,13 +413,23 @@ static uintptr_t kmap_setup_get_page(struct page_pool *pool)
 
 static struct spinlock kmap_lock;
 
-void *kmap(struct page **pages, size_t count)
+static void *_kmap(struct page **pages, size_t count, pageaccess_type_t access)
 {
 	const int enable = spin_lock_irqsave(&kmap_lock);
-	void *ptr = __kmap(pages, count);
+	void *ptr = ____kmap(pages, count, access);
 
 	spin_unlock_irqrestore(&kmap_lock, enable);
 	return ptr;
+}
+
+void *kmap(struct page **pages, size_t count)
+{
+	return _kmap(pages, count, PAGE_KERNEL);
+}
+
+void *kmap_user(struct page **pages, size_t count)
+{
+	return _kmap(pages, count, PAGE_USER);
 }
 
 void kunmap(void *ptr)
