@@ -1,5 +1,8 @@
 	.text
 	.code64
+
+#include <memory.h>
+
 	.global __thread_switch, __thread_entry
 	.extern thread_entry
 
@@ -9,21 +12,25 @@ __thread_entry:
 	movq %r13, %rsi
 	movq %r14, %rdx
 	call thread_entry
-1:	jmp 1b
+	iretq #pop's SS,RSP,RFLAGS,CS,RIP
 
 
 __thread_switch:
+	#save registers to old stack (@see struct thread_switch_frame)
 	pushq %rbp
 	pushq %rbx
 	pushq %r12
 	pushq %r13
 	pushq %r14
 	pushq %r15
-	pushfq
+	pushfq #rflags save
 
+	#save stack pointer to first arg
 	movq %rsp, (%rdi)
+	#move stack pointer to new thread stack
 	movq %rsi, %rsp
 
+	#restore registers from new stack
 	popfq
 	popq %r15
 	popq %r14
@@ -32,4 +39,4 @@ __thread_switch:
 	popq %rbx
 	popq %rbp
 
-	ret
+	ret #pop's %rip and jump to it

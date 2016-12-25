@@ -15,6 +15,8 @@
 #include <ramfs.h>
 #include <string.h>
 
+#include <syscall.h>
+
 static void qemu_gdb_hang(void)
 {
 #ifdef DEBUG
@@ -104,6 +106,8 @@ void ramfs_big_writeread_test(ramfs_t * fs, const char * file_path)
             //printf("%s\n", (char*)(test_out+test_shift));
             while(1);
         }
+
+        ramfs_rewind( &desc );
     }
 
     printf("Written: [%s]\n", (char*)(test_in+test_shift));
@@ -144,12 +148,16 @@ void ramfs_init_tests(ramfs_t * fs)
 {
 	(void) fs;
 	//printf("size: %lu\n", sizeof(fs_block_t));
-
+	
 	ramfs_dir_test(fs);
+	
+	ramfs_big_writeread_test(fs, "big_file");
+
+	
 	ramfs_print_dir(fs, "initrd");
 	ramfs_print_dir(fs, "initrd/simple_fs");
 
-	ramfs_big_writeread_test(fs, "big_file");
+	//ramfs_big_writeread_test(fs, "big_file");
 }
 
 static void test_kmap(void)
@@ -386,6 +394,63 @@ static void test_condition(void)
 	thread_destroy(th);
 }
 
+static void test_syscalls()
+{
+	printf("syscalls tests...\n");
+	const char * test_str = "Hello from syscall (write)!\n";
+	syscall(0, test_str, strlen(test_str));
+
+	//test syscall
+	int return_val = syscall(2, 1, 2, 3, 4, 5);
+	printf("syscall(2, 1, 2, 3, 4, 5) returned %d need %d\n", return_val, 6);
+
+	//make non valid call
+	int non_valid_no = 12;
+	return_val = syscall(non_valid_no);
+	printf("NONVALID syscall(%d) returned %d need %d\n", non_valid_no, return_val, ENOSYS);
+	printf("EOF syscalls tests...\n");
+}
+
+static void __userth_main(void * data)
+{
+	(void) data;
+	//printf("%lx\n", data);
+	printf("%s", (char *)data);
+
+	force_schedule();
+
+	//use syscall
+	const char * test_str = "Hello from userspace syscall!\n";
+	//(void) test_str;
+	syscall(0, test_str, strlen(test_str));
+
+	//check that we in user mode
+	//__asm__ volatile("int $127" : :);
+	printf("EOF userspace syscall test\n");
+}
+
+static void userspace_thread_create()
+{
+	/*
+	char test_str[] = "I'm in userspace!\n";
+	size_t test_len = strlen(test_str);
+	char * data = mem_alloc( test_len );
+	strcpy(data, test_str);
+	//memset(data, 0, test_len);
+	//printf("%lx\n", data);
+	//printf("%s\n", (char *)data);
+	*/
+	printf("START userspace syscall test\n");
+	struct thread *th = userthread_create(&__userth_main, "I'm in userspace!\n");
+	(void) th;
+
+	thread_activate(th);
+	thread_destroy(th);
+	//thread_activate(th);
+	printf("userspace_thread_create FINISHED\n");
+	//mem_free( data );
+}
+
 void main(void *bootstrap_info)
 {
 	qemu_gdb_hang();
@@ -404,6 +469,14 @@ void main(void *bootstrap_info)
 	enable_ints();
 
 	printf("Tests Begin\n");
+	test_syscalls();
+
+	//check that we not cracked all
+	test_threads();
+	
+	userspace_thread_create();
+	//printf("while(1);\n");
+	while(1);
 	ramfs_init_tests(&fs);
 	test_buddy();
 	test_slab();

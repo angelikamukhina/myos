@@ -11,6 +11,9 @@
 #define PAGE_MASK	(PAGE_SIZE - 1)
 #define KERNEL_CS	0x08
 #define KERNEL_DS	0x10
+#define USER_CS		0x1b
+#define USER_DS		0x23
+
 #define MAX_ORDER	18 // just enough for 1GB pages
 
 #ifndef __ASM_FILE__

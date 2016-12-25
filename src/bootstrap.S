@@ -39,6 +39,8 @@ gdt:
 	.quad 0x00cf9b000000ffff // 32 bit ring0 code segment
 	.quad 0x00cf93000000ffff // 32 bit ring0 data segment
 	.quad 0x0000000000000000
+
+	.global gdt_ptr
 gdt_ptr:
 	.word (gdt_ptr - gdt - 1)
 	.long gdt
@@ -242,6 +244,8 @@ start64:
 
 
 	.bss
+	.global bootstrap_stack_top, bootstrap_stack_begin
+bootstrap_stack_begin:
 	.align PAGE_SIZE
 	.space PAGE_SIZE
 bootstrap_stack_top:

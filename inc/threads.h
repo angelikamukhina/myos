@@ -25,6 +25,7 @@ struct thread {
 
 struct thread *__thread_create(void (*fptr)(void *), void *arg, int order);
 struct thread *thread_create(void (*fptr)(void *), void *arg);
+struct thread *userthread_create(void (*fptr)(void *), void *arg);
 void thread_destroy(struct thread *thread);
 
 struct thread *thread_current(void);

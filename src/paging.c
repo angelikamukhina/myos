@@ -141,11 +141,11 @@ static void pt_map_pages(pte_t *pml4, uintptr_t begin, uintptr_t end,
 {
 	BUG_ON(begin & PAGE_MASK);
 	BUG_ON(end & PAGE_MASK);
-
+//!
 	/* We pass end - 1 to avoid overflows, and __pt_map_pages assumes
 	 * both ends of the interval are included in the interval. */
 	__pt_map_pages(pml4, begin, end - 1, phys,
-				flags | __PTE_PRESENT | __PTE_LARGE, 4, pool);
+				flags | __PTE_PRESENT | __PTE_LARGE | PTE_USER, 4, pool);
 }
 
 static void pt_populate_pages(pte_t *pml4, uintptr_t begin, uintptr_t end,
@@ -200,11 +200,11 @@ void paging_setup(void)
 	struct page_pool pool = { &paging_setup_get_page, 0 };
 	const uintptr_t pml4 = pool_get_page(&pool);
 	pte_t *pte = va(pml4);
-
+//!! PTE_USER add flag to two calls
 	pt_map_pages(pte, HIGHER_BASE, HIGHER_BASE + mem_size, 0,
-				PTE_WRITE, &pool);
+				PTE_WRITE | PTE_USER, &pool);
 
-	pt_map_pages(pte, VIRTUAL_BASE, 0, 0, PTE_WRITE, &pool);
+	pt_map_pages(pte, VIRTUAL_BASE, 0, 0, PTE_WRITE | PTE_USER, &pool);
 	write_cr3(pml4);
 
 	/* Not used yet, so we need to shut up compiler. */
@@ -338,10 +338,10 @@ static void *__kmap(struct page **pages, size_t count)
 	const uintptr_t from = (uintptr_t)kmap_addr(range);
 	const uintptr_t to = from + count * PAGE_SIZE;
 	int i = 0;
-
+//!!!
 	for (uintptr_t addr = from; addr != to; addr += PAGE_SIZE) {
 		pt_map_pages(pte, addr, addr + PAGE_SIZE,
-					page_addr(pages[i++]), PTE_WRITE, 0);
+					page_addr(pages[i++]), PTE_WRITE | PTE_USER, 0);//
 		flush_tlb_addr((const void *)addr);
 	}
 

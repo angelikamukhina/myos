@@ -362,7 +362,7 @@ static void ramfs_open_file_create( fs_desc_t * desc, list_head_t * parent_dir_l
     _init_file_desc( file_head_block, desc );
 }
 
-static void ramfs_open_init_readpos( fs_desc_t * desc )
+void ramfs_rewind(fs_desc_t * desc)
 {
     desc->file.curr_read_block = desc->file.parts_list_file_head->next;
     desc->file.curr_read_block_pos = 0;
@@ -448,7 +448,7 @@ fs_desc_t ramfs_open( ramfs_t * fs, const char * full_path )
     //init file descriptor
     if ( desc.type == fs_file )
     {
-        ramfs_open_init_readpos( &desc );
+        ramfs_rewind( &desc );
 
         if ( list_empty(desc.file.curr_read_block) )
         {
@@ -649,10 +649,10 @@ void ramfs_fwrite(const void * ptr, size_t size, size_t count, fs_desc_t * desc)
         return;
     }
 
-    ramfs_open_init_readpos( desc );
+    ramfs_rewind( desc );
 
     spin_unlock_irqrestore(&desc->fs->lock, enable);
-    //ramfs_open_init_readpos( desc );
+    //ramfs_rewind( desc );
 }
 
 size_t ramfs_fread(void * ptr, size_t size, size_t count, fs_desc_t * desc)
@@ -717,12 +717,7 @@ size_t ramfs_fread(void * ptr, size_t size, size_t count, fs_desc_t * desc)
 	    //if ( &curr_read_block->file_contpart.parts_list == desc->file.parts_list_file_head )
 	    if ( curr_read_block->type == fs_file_head )
 	    {
-                if ( i != data_length )
-                {
-                    desc->file.eof = true;
-                } else {
-                    ramfs_open_init_readpos( desc );
-		}
+		desc->file.eof = true;
 
                 debug_print("next read part list is a file head! %d bytes read (need %d)\n", i, data_length);
                 spin_unlock_irqrestore(&desc->fs->lock, enable);

@@ -10,6 +10,7 @@
 #define IDT_TRAP_GATE	((uint64_t)15 << 40)
 #define IDT_USER	((uint64_t)3 << 45)
 #define IDT_ENTRIES	256
+#define IDT_SYSCALL	0x80 //as in linux kernel
 
 #define IRQS		16
 #define ERRORS		32
@@ -98,14 +99,22 @@ void deactivate_irq(int irq)
 static void idt_setup(void)
 {
 	static const uint64_t flags = IDT_PRESENT | IDT_INT_GATE;
+	static const uint64_t syscall_flags = IDT_PRESENT | IDT_TRAP_GATE | IDT_USER;
 	static struct idt_entry idt[IDT_ENTRIES];
 	extern uint64_t __int_entry[];
 
 	/* All idt entries by default set to Interrupt Gate type, so that
 	 * when interrupt happens cpu before calling interrupt handler
 	 * disables interrupts until iret instruction executed. */
-	for (int i = 0; i != IDT_ENTRIES; ++i)
+	for (int i = 0; i != IDT_SYSCALL; ++i)
 		idt_entry_setup(&idt[i], KERNEL_CS, __int_entry[i], flags);
+
+	for (int i = IDT_SYSCALL + 1; i != IDT_ENTRIES; ++i)
+		idt_entry_setup(&idt[i], KERNEL_CS, __int_entry[i], flags);
+
+	//syscall
+	extern void __syscall_handler();
+	idt_entry_setup(&idt[IDT_SYSCALL], KERNEL_CS, (uint64_t)&__syscall_handler, syscall_flags);
 
 	struct desc_table_ptr ptr = {
 		.size = sizeof(idt) - 1,
